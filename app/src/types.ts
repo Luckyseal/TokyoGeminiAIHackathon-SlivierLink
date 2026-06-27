@@ -36,7 +36,7 @@ export interface FamilyMemo {
 }
 
 export interface SemanticToken {
-  type: 'medication_missed' | 'routine_disruption' | 'no_signal' | 'wellbeing_signal';
+  type: 'medication_missed' | 'medication_taken' | 'routine_disruption' | 'no_signal' | 'wellbeing_signal';
   label: string;
   description: string;
   timestamp: string;

@@ -302,6 +302,21 @@ button {
   gap: 0.45rem;
 }
 
+.med-reminder {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  max-width: 40ch;
+}
+
+.med-reminder h2 {
+  font-size: var(--font-size-elder-lg);
+  font-weight: 300;
+  color: var(--color-on-surface);
+}
+
 .tts-credit,
 .powered-credit {
   font-size: var(--font-size-xs);

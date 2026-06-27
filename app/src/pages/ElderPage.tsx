@@ -5,6 +5,8 @@ import { GEMINI_MODEL, FALLBACK_MEDICINE_CARD, analyzeSampleDocument, analyzeMed
 import { speakJapanese, speakText } from '../api/tts';
 import { useMicLevel } from '../hooks/useMicLevel';
 import type { CloudProof, MedicineCard, DemoState, TtsSource } from '../types';
+import { buildLogText, fetchReport, type CareReport } from '../report';
+import { ReportCard } from '../components/ReportCard';
 
 const formatProofTime = () =>
   new Date().toLocaleTimeString('ja-JP', {
@@ -31,7 +33,7 @@ const getTtsProofLabel = (source: TtsSource) => {
 
 export function ElderPage() {
   const { mode, ttsVoice } = useSettings();
-  const { setMemo, addToken } = useFamilyStore();
+  const { memo, setMemo, addToken, tokens } = useFamilyStore();
   const mic = useMicLevel();
 
   const [state, setState] = useState<DemoState>('idle');
@@ -39,6 +41,9 @@ export function ElderPage() {
   const [cloudProof, setCloudProof] = useState<CloudProof | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [careMessage, setCareMessage] = useState<string | null>(null);
+  const [medFlow, setMedFlow] = useState<'none' | 'reminder' | 'taken'>('none');
+  const [medReport, setMedReport] = useState<CareReport | null>(null);
+  const [medReportLoading, setMedReportLoading] = useState(false);
 
   const lastSpokeRef = useRef(0);
   const speakingRef = useRef(false);
@@ -193,6 +198,49 @@ export function ElderPage() {
     setState('idle');
   };
 
+  const medTimestamp = () =>
+    new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+  // Simulated medication adherence: edge signal "medicine box not moved" -> gentle
+  // reminder -> simulated "took medicine" action -> shared to family & doctor.
+  const startMedReminder = async () => {
+    setMedFlow('reminder');
+    addToken({
+      type: 'medication_missed',
+      label: '服薬サインなし（薬箱が動いていません）',
+      description:
+        'エッジ層からのセマンティックシグナル：本日の服薬がまだ確認されていません。生データではなく意味情報のみを扱います。',
+      timestamp: medTimestamp(),
+    });
+    await speakText(
+      'お薬が、まだ机の上にあるようです。急がなくても、大丈夫ですよ。一緒に、確認しましょうね。',
+      ttsVoice,
+      mode === 'live'
+    );
+  };
+
+  const confirmMedTaken = async () => {
+    setMedFlow('taken');
+    addToken({
+      type: 'medication_taken',
+      label: '服薬を確認しました',
+      description: 'ご本人が服薬を確認しました（デモ：服薬動作のシミュレーション）。',
+      timestamp: medTimestamp(),
+    });
+    await speakText('確認できました。ありがとうございます。よく頑張りましたね。', ttsVoice, mode === 'live');
+  };
+
+  const makeMedReport = async () => {
+    setMedReportLoading(true);
+    setMedReport(await fetchReport(buildLogText(memo, tokens), 'family'));
+    setMedReportLoading(false);
+  };
+
+  const resetMed = () => {
+    setMedFlow('none');
+    setMedReport(null);
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -237,7 +285,7 @@ export function ElderPage() {
 
   return (
     <div className="page">
-      {state === 'idle' && (
+      {state === 'idle' && medFlow === 'none' && (
         <div className="orb-container">
           <div
             className={`orb-wrapper${mic.listening ? ' listening' : ''}`}
@@ -290,6 +338,59 @@ export function ElderPage() {
                 気持ちを聞いてもらう
               </button>
             )}
+            <button type="button" className="btn-secondary" onClick={() => void startMedReminder()}>
+              服薬の見守り（デモ）
+            </button>
+          </div>
+        </div>
+      )}
+
+      {state === 'idle' && medFlow === 'reminder' && (
+        <div className="orb-container">
+          <div className="orb-wrapper">
+            <div className="orb speaking" />
+          </div>
+          <div className="med-reminder">
+            <h2>お薬の時間です</h2>
+            <p className="care-caption">
+              お薬が、まだ机の上にあるようです。急がなくても大丈夫ですよ。一緒に確認しましょうね。
+            </p>
+            <span className="tts-credit">🔊 Google Cloud Text-to-Speech・Chirp3-HD</span>
+          </div>
+          <div className="card-actions-row">
+            <button className="btn-primary" onClick={() => void confirmMedTaken()}>
+              お薬を飲みました
+            </button>
+            <button className="btn-secondary" onClick={resetMed}>
+              あとで
+            </button>
+          </div>
+        </div>
+      )}
+
+      {state === 'idle' && medFlow === 'taken' && (
+        <div className="orb-container">
+          <div className="orb-wrapper">
+            <div className="orb" />
+          </div>
+          <div className="med-reminder">
+            <p style={{ color: 'var(--color-ok)', fontSize: 'var(--font-size-elder-lg)' }}>
+              ✓ 服薬を記録しました
+            </p>
+            <p>ご家族と医師に共有しました。</p>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center', width: '100%' }}>
+            <button
+              className="btn-primary"
+              onClick={() => void makeMedReport()}
+              disabled={medReportLoading}
+            >
+              {medReportLoading ? '作成中...' : 'まとめレポートを作成'}
+            </button>
+            {medReport && <ReportCard report={medReport} audienceLabel="宛先: ご家族・医師" />}
+            <button className="btn-secondary" onClick={resetMed}>
+              完了
+            </button>
           </div>
         </div>
       )}
