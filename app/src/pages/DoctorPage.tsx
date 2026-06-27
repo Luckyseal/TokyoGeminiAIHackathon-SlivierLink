@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { useFamilyStore } from '../store/family';
+import { useCareMemory } from '../store/careMemory';
 import { useSettings } from '../store/settings';
 import { buildLogText, fetchReport, type CareReport } from '../report';
 import { ReportCard } from '../components/ReportCard';
 
 export function DoctorPage() {
   const { memo, tokens } = useFamilyStore();
+  const { entries: memories, actions: memoryActions } = useCareMemory();
   const { doctorType } = useSettings();
   const [report, setReport] = useState<CareReport | null>(null);
   const [loading, setLoading] = useState(false);
@@ -14,12 +16,12 @@ export function DoctorPage() {
 
   const makeReport = async () => {
     setLoading(true);
-    const r = await fetchReport(buildLogText(memo, tokens), 'doctor');
+    const r = await fetchReport(buildLogText(memo, tokens, memories, memoryActions), 'doctor');
     setReport(r);
     setLoading(false);
   };
 
-  const hasData = Boolean(memo) || tokens.length > 0;
+  const hasData = Boolean(memo) || tokens.length > 0 || memories.length > 0;
 
   return (
     <div className="page">
@@ -32,6 +34,23 @@ export function DoctorPage() {
         {/* Shared observations the doctor receives */}
         <div className="semantic-section">
           <h2 className="semantic-section-title">受信した見守り情報</h2>
+          {memories.length > 0 && (
+            <div className="clinical-memory">
+              <div className="memory-card-topline">
+                <span>ケア記憶</span>
+                <span>{memories[0].dateLabel}</span>
+              </div>
+              <div className="memory-summary">{memories[0].summary}</div>
+              <div className="memory-detail">{memories[0].observedSignal}</div>
+              <div className="clinical-action-list">
+                {memoryActions.map((action) => (
+                  <span key={action.id} className={`clinical-action${action.done ? ' done' : ''}`}>
+                    {action.label}: {action.done ? `実施済み ${action.completedAt ?? ''}` : '未実施'}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
           {memo && (
             <div className="memo-card">
               <div className="memo-timestamp">{memo.timestamp}</div>

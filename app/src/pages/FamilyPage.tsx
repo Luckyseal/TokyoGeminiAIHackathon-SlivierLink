@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useFamilyStore, SEMANTIC_TOKENS } from '../store/family';
+import { useCareMemory } from '../store/careMemory';
 import { useSettings } from '../store/settings';
 import { buildLogText, fetchReport, type CareReport } from '../report';
 import { ReportCard } from '../components/ReportCard';
@@ -7,16 +8,17 @@ import type { SemanticToken } from '../types';
 
 export function FamilyPage() {
   const { memo, tokens, addToken, clearTokens } = useFamilyStore();
+  const { entries: memories, actions: memoryActions, markAction, resetDemoMemory } = useCareMemory();
   const { doctorType } = useSettings();
   const [report, setReport] = useState<CareReport | null>(null);
   const [loadingReport, setLoadingReport] = useState(false);
 
   const doctorLabel = doctorType === 'private' ? '私人医師' : '地域のかかりつけ医';
-  const hasData = Boolean(memo) || tokens.length > 0;
+  const hasData = Boolean(memo) || tokens.length > 0 || memories.length > 0;
 
   const makeReport = async () => {
     setLoadingReport(true);
-    setReport(await fetchReport(buildLogText(memo, tokens), 'family'));
+    setReport(await fetchReport(buildLogText(memo, tokens, memories, memoryActions), 'family'));
     setLoadingReport(false);
   };
 
@@ -41,6 +43,45 @@ export function FamilyPage() {
       </div>
 
       <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+        <div className="memory-panel">
+          <div className="memory-panel-header">
+            <h2 className="semantic-section-title">記憶と今日のケア</h2>
+            <button type="button" className="btn-ghost" onClick={resetDemoMemory}>
+              デモ記憶をリセット
+            </button>
+          </div>
+
+          <div className="memory-list">
+            {memories.map((memory) => (
+              <div key={memory.id} className={`memory-card concern-${memory.concern}`}>
+                <div className="memory-card-topline">
+                  <span>{memory.dateLabel}</span>
+                  <span>{memory.timestamp}</span>
+                </div>
+                <div className="memory-summary">{memory.summary}</div>
+                <div className="memory-detail">{memory.observedSignal}</div>
+                <div className="memory-followup">{memory.suggestedFollowUp}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="memory-actions">
+            {memoryActions.map((action) => (
+              <button
+                key={action.id}
+                type="button"
+                className={`memory-action${action.done ? ' done' : ''}`}
+                onClick={() => markAction(action.id)}
+                aria-pressed={action.done}
+              >
+                <span className="memory-action-status">{action.done ? '完了' : '今日'}</span>
+                <span className="memory-action-label">{action.label}</span>
+                <span className="memory-action-desc">{action.description}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Manual Handoff Memo Section */}
         <div>
           <h2 className="semantic-section-title">お薬確認手渡しメモ</h2>

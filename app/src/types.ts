@@ -4,8 +4,6 @@ export type AppMode = 'rehearsal' | 'live';
 
 export interface AppSettings {
   mode: AppMode;
-  geminiApiKey: string;
-  ttsApiKey: string;
   ttsVoice: string;
 }
 
@@ -40,6 +38,29 @@ export interface SemanticToken {
   label: string;
   description: string;
   timestamp: string;
+}
+
+export type CareConcern = 'low' | 'medium' | 'high';
+
+export interface CareMemoryEntry {
+  id: string;
+  dateLabel: string;
+  timestamp: string;
+  source: 'demo' | 'wellbeing';
+  summary: string;
+  observedSignal: string;
+  suggestedFollowUp: string;
+  concern: CareConcern;
+}
+
+export type CareMemoryActionId = 'voice_check' | 'routine_check' | 'share_followup';
+
+export interface CareMemoryAction {
+  id: CareMemoryActionId;
+  label: string;
+  description: string;
+  done: boolean;
+  completedAt?: string;
 }
 
 export type DemoState =

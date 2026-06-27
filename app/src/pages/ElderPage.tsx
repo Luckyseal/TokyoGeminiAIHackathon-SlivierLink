@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useSettings } from '../store/settings';
 import { useFamilyStore, createFamilyMemo } from '../store/family';
+import { useCareMemory } from '../store/careMemory';
 import { GEMINI_MODEL, FALLBACK_MEDICINE_CARD, analyzeSampleDocument, analyzeMedicineImage } from '../api/gemini';
 import { speakJapanese, speakText } from '../api/tts';
 import { useMicLevel } from '../hooks/useMicLevel';
@@ -34,7 +35,15 @@ const getTtsProofLabel = (source: TtsSource) => {
 export function ElderPage() {
   const { mode, ttsVoice } = useSettings();
   const { memo, setMemo, addToken, tokens } = useFamilyStore();
-  const mic = useMicLevel();
+  const { entries: memories, actions: memoryActions, markAction, rememberWellbeingSignal } = useCareMemory();
+  const {
+    level: micLevel,
+    enabled: micEnabled,
+    listening: micListening,
+    error: micError,
+    toggle: toggleMic,
+    captureWav,
+  } = useMicLevel();
 
   const [state, setState] = useState<DemoState>('idle');
   const [card, setCard] = useState<MedicineCard | null>(null);
@@ -47,6 +56,13 @@ export function ElderPage() {
 
   const lastSpokeRef = useRef(0);
   const speakingRef = useRef(false);
+  const captureWavRef = useRef(captureWav);
+  const featuredMemory = memories.find((memory) => memory.id === 'yesterday-low-mood') ?? memories[0];
+  const voiceCheckAction = memoryActions.find((action) => action.id === 'voice_check');
+
+  useEffect(() => {
+    captureWavRef.current = captureWav;
+  }, [captureWav]);
 
   // Analyze one short clip: ask Gemini for a wellbeing reading, respond with care,
   // and log a semantic signal to the family view. Raw audio is never stored or kept.
@@ -76,6 +92,12 @@ export function ElderPage() {
             second: '2-digit',
           }),
         });
+        rememberWellbeingSignal({
+          moodLabel: reading.moodLabel,
+          cues,
+          concern: reading.concern === 'high' ? 'high' : reading.concern === 'medium' ? 'medium' : 'low',
+          careMessageJa: reading.careMessageJa,
+        });
       }
 
       const now = Date.now();
@@ -101,20 +123,20 @@ export function ElderPage() {
 
   // Manual "listen to me now": capture a clip and analyze it immediately.
   const runWellbeingCheck = async (manual: boolean) => {
-    if (!mic.listening) return;
-    const clip = await mic.captureWav(5000);
+    if (!micListening) return;
+    const clip = await captureWavRef.current(5000);
     if (clip) await analyzeRef.current(clip, manual);
   };
 
   // Continuous gentle monitoring while the mic is on: back-to-back short windows,
   // analyzed only when there is actual sound (silence skipped) and not while speaking.
   useEffect(() => {
-    if (!mic.listening) return;
+    if (!micListening) return;
     let active = true;
     let inflight = 0;
     const loop = async () => {
       while (active) {
-        const clip = await mic.captureWav(5000);
+        const clip = await captureWavRef.current(5000);
         if (!active) break;
         if (!clip || speakingRef.current) continue;
         if (clip.peak < 0.01) continue; // skip near-silent windows
@@ -129,7 +151,7 @@ export function ElderPage() {
     return () => {
       active = false;
     };
-  }, [mic.listening]);
+  }, [micListening]);
 
   const handleAction = async () => {
     try {
@@ -232,7 +254,7 @@ export function ElderPage() {
 
   const makeMedReport = async () => {
     setMedReportLoading(true);
-    setMedReport(await fetchReport(buildLogText(memo, tokens), 'family'));
+    setMedReport(await fetchReport(buildLogText(memo, tokens, memories, memoryActions), 'family'));
     setMedReportLoading(false);
   };
 
@@ -288,8 +310,8 @@ export function ElderPage() {
       {state === 'idle' && medFlow === 'none' && (
         <div className="orb-container">
           <div
-            className={`orb-wrapper${mic.listening ? ' listening' : ''}`}
-            style={{ ['--audio-level']: String(mic.level) } as React.CSSProperties}
+            className={`orb-wrapper${micListening ? ' listening' : ''}`}
+            style={{ ['--audio-level']: String(micLevel) } as React.CSSProperties}
           >
             <div className="orb" />
           </div>
@@ -301,6 +323,19 @@ export function ElderPage() {
             <div className="care-block">
               <p className="care-caption">{careMessage}</p>
               <span className="tts-credit">🔊 Google Cloud Text-to-Speech・Chirp3-HD</span>
+            </div>
+          )}
+          {featuredMemory && (
+            <div className="elder-memory-nudge">
+              <span>{featuredMemory.dateLabel}の記憶</span>
+              <p>{featuredMemory.summary}</p>
+              <button
+                type="button"
+                className="btn-secondary memory-action-small"
+                onClick={() => markAction('voice_check')}
+              >
+                {voiceCheckAction?.done ? '声かけ済み' : '声をかけました'}
+              </button>
             </div>
           )}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%', alignItems: 'center' }}>
@@ -318,18 +353,18 @@ export function ElderPage() {
             </label>
             <button
               type="button"
-              className={`mic-toggle${mic.enabled ? ' active' : ''}`}
-              onClick={mic.toggle}
-              aria-pressed={mic.enabled}
+              className={`mic-toggle${micEnabled ? ' active' : ''}`}
+              onClick={toggleMic}
+              aria-pressed={micEnabled}
             >
-              {mic.listening ? '🎙 音に反応しています' : '🎙 マイクに反応'}
+              {micListening ? '🎙 音に反応しています' : '🎙 マイクに反応'}
             </button>
-            {mic.error && (
+            {micError && (
               <span style={{ fontSize: '0.8rem', color: 'var(--color-on-surface-variant)' }}>
                 マイクを使用できません（許可が必要です）
               </span>
             )}
-            {mic.listening && (
+            {micListening && (
               <button
                 type="button"
                 className="btn-secondary"

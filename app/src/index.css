@@ -302,6 +302,36 @@ button {
   gap: 0.45rem;
 }
 
+.elder-memory-nudge {
+  width: min(100%, 420px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  background: var(--color-surface-variant);
+  border: 1px solid rgba(212, 169, 106, 0.24);
+  border-radius: var(--radius-md);
+  text-align: center;
+}
+
+.elder-memory-nudge span {
+  color: var(--color-secondary);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.elder-memory-nudge p {
+  color: var(--color-on-surface);
+  font-size: var(--font-size-md);
+  line-height: 1.7;
+}
+
+.memory-action-small {
+  align-self: center;
+  font-size: var(--font-size-md);
+}
+
 .med-reminder {
   text-align: center;
   display: flex;
@@ -741,6 +771,142 @@ button {
   border: 1px solid rgba(86, 211, 100, 0.3);
 }
 
+/* ===== Care Memory ===== */
+.memory-panel {
+  width: 100%;
+}
+
+.memory-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.memory-panel-header .semantic-section-title {
+  margin-bottom: 0;
+}
+
+.memory-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
+}
+
+.memory-card,
+.clinical-memory {
+  width: 100%;
+  background: var(--color-surface-container);
+  border: 1px solid rgba(212, 169, 106, 0.22);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-lg);
+}
+
+.memory-card.concern-high {
+  border-color: rgba(255, 120, 120, 0.45);
+}
+
+.memory-card-topline {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  color: var(--color-on-surface-variant);
+  font-size: var(--font-size-xs);
+  margin-bottom: var(--spacing-sm);
+}
+
+.memory-summary {
+  color: var(--color-on-surface);
+  font-size: var(--font-size-lg);
+  line-height: 1.6;
+  margin-bottom: var(--spacing-sm);
+}
+
+.memory-detail,
+.memory-followup {
+  color: var(--color-on-surface-variant);
+  font-size: var(--font-size-sm);
+  line-height: 1.7;
+}
+
+.memory-followup {
+  margin-top: var(--spacing-sm);
+  color: var(--color-secondary);
+}
+
+.memory-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--spacing-sm);
+}
+
+.memory-action {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  padding: var(--spacing-md);
+  background: var(--color-surface-variant);
+  color: var(--color-on-surface);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  text-align: left;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.memory-action.done {
+  background: var(--color-ok-dim);
+  border-color: rgba(86, 211, 100, 0.32);
+}
+
+.memory-action-status {
+  color: var(--color-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.memory-action.done .memory-action-status {
+  color: var(--color-ok);
+}
+
+.memory-action-label {
+  font-size: var(--font-size-md);
+  font-weight: 500;
+}
+
+.memory-action-desc {
+  color: var(--color-on-surface-variant);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+}
+
+.clinical-memory {
+  margin-bottom: var(--spacing-md);
+}
+
+.clinical-action-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-md);
+}
+
+.clinical-action {
+  color: var(--color-on-surface-variant);
+  font-size: var(--font-size-xs);
+  padding: 4px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-full);
+}
+
+.clinical-action.done {
+  color: var(--color-ok);
+  border-color: rgba(86, 211, 100, 0.25);
+  background: var(--color-ok-dim);
+}
+
 /* ===== Semantic Token Section ===== */
 .semantic-section {
   width: 100%;
@@ -996,6 +1162,15 @@ button {
   }
 
   .cloud-proof-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .memory-panel-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .memory-actions {
     grid-template-columns: 1fr;
   }
 }

@@ -6,17 +6,19 @@ It quietly helps families notice small daily changes, respond gently, and hand o
 
 ## Demo Views
 - `/elder`: Elder-facing ambient orb interface. Large, readable font, high contrast, and gentle Japanese voice guide.
-- `/family`: Family-facing view showing received manual handoff memos and semantic signals logs. Includes the interactive demo panel to inject simulated events.
+- `/family`: Family-facing view showing care memory, today's follow-up actions, received handoff memos, and semantic signal logs. Includes the interactive demo panel to inject simulated events.
+- `/doctor`: Doctor-facing observation handoff with the same care memory and action status, summarized for a clinician.
 
 ## Google Cloud Integration
-- **Gemini**: Uses `@google/genai` with `gemini-3.5-flash` to analyze medicine label images/documents and extract structured JSON (Medicine name, timing, description, uncertainties, handoff advice).
-- **Google Cloud Text-to-Speech**: Synthesizes Japanese SSML to produce slow, calm, and reassuring speech output.
+- **Gemini**: Cloud Run calls Vertex AI with `gemini-3.5-flash` to analyze medicine label images/documents, short wellbeing audio clips, and caregiver/doctor summaries.
+- **Google Cloud Text-to-Speech**: Cloud Run calls Google Cloud Text-to-Speech with Japanese Chirp3-HD voices for slow, calm, and reassuring speech output.
 - **Visible Proof Panel**: After the elder flow runs, the app shows whether Gemini used the live Gemini path or deterministic fallback, whether voice used Google Cloud TTS or browser speech fallback, the selected voice, and the latest check time.
 
 ## Live vs Fallback Behavior
-- In `Live GCP` mode with valid keys, `/elder` calls Gemini 3.5 Flash and Google Cloud Text-to-Speech from the browser demo client.
-- If a key is missing or an API call fails, the flow stays demo-safe with a deterministic medicine card and browser speech fallback.
+- In `Live GCP` mode, the browser calls Cloud Run `/api/*` endpoints. The server uses the Cloud Run service account to call Vertex AI Gemini and Google Cloud Text-to-Speech.
+- The browser does not store or require Gemini/TTS API keys. If a server API call fails, the flow stays demo-safe with a deterministic medicine card and browser speech fallback.
 - The family semantic signal buttons are simulated edge tokens for the hackathon demo. They do not claim physical sensor integration or raw sensor stream analysis.
+- Care memory is local demo state: yesterday's low-mood observation becomes today's concrete family actions, then the action status is included in Gemini summaries.
 
 ## Safety & Compliance Boundary
 - **No Diagnosis**: SilverLink does not diagnose any condition.
@@ -30,12 +32,12 @@ It quietly helps families notice small daily changes, respond gently, and hand o
 ## Local Development
 1. Create a `.env` file in this directory:
 ```bash
-VITE_GEMINI_API_KEY=AIzaSy...
-VITE_TTS_API_KEY=AIzaSy...
-VITE_TTS_VOICE=ja-JP-Neural2-B
 GOOGLE_CLOUD_PROJECT=geminiaihackathon-yancy0627
+GOOGLE_CLOUD_LOCATION=global
+GEMINI_MODEL=gemini-3.5-flash
+TTS_VOICE=ja-JP-Chirp3-HD-Sulafat
 ```
-The Vite client only exposes environment variables prefixed with `VITE_`. API keys can also be pasted into the settings drawer during the demo; those pasted keys are kept in memory and are not persisted to localStorage.
+For Cloud Run, these values should be set as service environment variables when needed. Local live API testing also needs Google Cloud auth, for example `GCP_ACCESS_TOKEN` or a Cloud Run/metadata-server environment. The settings drawer controls demo mode, voice, and doctor handoff target only.
 
 2. Install & Run:
 ```bash
@@ -55,7 +57,7 @@ npm start
 The production server reads `PORT` from the environment and falls back to `8080`.
 
 ## Cloud Run Deployment Path
-This app is Cloud Run ready through `Dockerfile` and `server.mjs`. It serves the Vite `dist/` output and supports SPA routes such as `/elder` and `/family`.
+This app is Cloud Run ready through `Dockerfile` and `server.mjs`. It serves the Vite `dist/` output, supports SPA routes such as `/elder`, `/family`, and `/doctor`, and exposes server-side `/api/analyze`, `/api/wellbeing`, `/api/report`, `/api/tts`, and `/api/health`.
 
 Current deployed demo:
 
@@ -81,4 +83,4 @@ gcloud run deploy silverlink-ambient-agent \
   --project geminiaihackathon-yancy0627
 ```
 
-Set API keys through the Cloud Run console, Secret Manager, or the in-app settings drawer during a live demo. Do not commit `.env`, `working/`, or pre-event working materials.
+Set Google Cloud project/model/voice configuration through Cloud Run environment variables. Do not commit `.env`, `working/`, or pre-event working materials.
