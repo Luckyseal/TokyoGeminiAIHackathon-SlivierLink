@@ -1,5 +1,9 @@
-// Google Cloud Text-to-Speech client for senior-friendly Japanese voice
-// With browser Web Speech API fallback
+// Senior-friendly Japanese voice.
+// Primary: Google Cloud TTS (Chirp3-HD) via the server-side proxy.
+// Fallback: browser Web Speech API.
+//
+// Chirp3-HD does not use SSML — it renders warm, natural prosody from plain
+// text + punctuation, with gentle pacing controlled by speakingRate on the server.
 
 export type TtsSource = 'google-cloud' | 'browser-fallback' | 'error';
 
@@ -8,80 +12,37 @@ export interface TtsResult {
   played: boolean;
 }
 
-// SSML templates from cloud/02_senior_tts_ssml.md
-const SSML_MEDICINE_CONFIRMATION = `<speak>
-  <prosody rate="92%">
-    お薬が、まだ机の上にあるようです。<break time="700ms"/>
-    急がなくても大丈夫です。<break time="600ms"/>
-    一緒に、確認しましょうか。
-  </prosody>
-</speak>`;
+// Warm, caring Japanese lines. Commas/periods drive Chirp3-HD's natural pauses.
+const TEXT_MEDICINE_CONFIRMATION =
+  'お薬が、まだ机の上にあるようです。急がなくても、大丈夫ですよ。一緒に、確認しましょうね。';
 
-const SSML_REASSURING_HANDOFF = `<speak>
-  <prosody rate="92%">
-    わかりました。<break time="600ms"/>
-    ご家族に、短いメモを用意しますね。<break time="700ms"/>
-    判断は、薬剤師さんにも確認できるようにしておきます。
-  </prosody>
-</speak>`;
+const TEXT_REASSURING_HANDOFF =
+  'わかりました。ご家族に、短いメモを用意しますね。判断は、薬剤師さんにも、確認できるようにしておきますね。';
 
-export const SSML_TEMPLATES = {
-  medicineConfirmation: SSML_MEDICINE_CONFIRMATION,
-  reassuringHandoff: SSML_REASSURING_HANDOFF,
+export const TTS_TEXTS = {
+  medicineConfirmation: TEXT_MEDICINE_CONFIRMATION,
+  reassuringHandoff: TEXT_REASSURING_HANDOFF,
 };
 
-// Plain text versions for browser fallback
-const PLAIN_MEDICINE_CONFIRMATION =
-  'お薬が、まだ机の上にあるようです。急がなくても大丈夫です。一緒に、確認しましょうか。';
-
-const PLAIN_REASSURING_HANDOFF =
-  'わかりました。ご家族に、短いメモを用意しますね。判断は、薬剤師さんにも確認できるようにしておきます。';
-
-export const PLAIN_TEXTS = {
-  medicineConfirmation: PLAIN_MEDICINE_CONFIRMATION,
-  reassuringHandoff: PLAIN_REASSURING_HANDOFF,
-};
-
-// Google Cloud TTS REST API call
-async function callGoogleCloudTts(
-  ssml: string,
-  apiKey: string,
-  voice: string
-): Promise<string> {
-  const response = await fetch(
-    `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        input: { ssml },
-        voice: {
-          languageCode: 'ja-JP',
-          name: voice || 'ja-JP-Neural2-B',
-        },
-        audioConfig: {
-          audioEncoding: 'MP3',
-          // Do NOT set speakingRate here — speed is controlled inside SSML prosody
-        },
-      }),
-    }
-  );
-
-  if (!response.ok) {
-    throw new Error(`TTS API error: ${response.status}`);
+// Call the server proxy → base64 MP3
+async function callServerTts(text: string, voice: string): Promise<string> {
+  const res = await fetch('/api/tts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text, voice }),
+  });
+  if (!res.ok) {
+    throw new Error(`tts failed: ${res.status}`);
   }
-
-  const data = await response.json();
-  return data.audioContent as string; // base64 MP3
+  const data = await res.json();
+  return data.audioContent as string;
 }
 
-// Play base64 MP3 audio, returns when done or times out
+// Play base64 MP3 audio, resolving when done or after a safety timeout
 function playBase64Audio(base64Audio: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    const audioData = `data:audio/mp3;base64,${base64Audio}`;
-    const audio = new Audio(audioData);
+    const audio = new Audio(`data:audio/mp3;base64,${base64Audio}`);
 
-    // Safety timeout: 30 seconds max
     const timeout = setTimeout(() => {
       audio.pause();
       resolve();
@@ -97,7 +58,7 @@ function playBase64Audio(base64Audio: string): Promise<void> {
       reject(new Error('Audio playback error'));
     };
 
-    // Catch autoplay rejection
+    // Catch autoplay rejection so a blocked play never freezes the UI
     audio.play().catch((err) => {
       clearTimeout(timeout);
       reject(err);
@@ -113,7 +74,7 @@ function speakWithBrowser(text: string): Promise<void> {
       return;
     }
 
-    // Safety timeout based on text length (approx 150ms per char at slow rate)
+    // Safety timeout scaled to text length
     const safetyMs = Math.max(10_000, text.length * 200);
     const timeout = setTimeout(() => {
       window.speechSynthesis.cancel();
@@ -122,21 +83,20 @@ function speakWithBrowser(text: string): Promise<void> {
 
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'ja-JP';
-    utterance.rate = 0.75;
-    utterance.pitch = 0.9;
+    utterance.rate = 0.85;
+    utterance.pitch = 0.95;
     utterance.volume = 1.0;
 
     utterance.onend = () => {
       clearTimeout(timeout);
       resolve();
     };
-
     utterance.onerror = () => {
       clearTimeout(timeout);
-      resolve(); // resolve anyway — don't block UI
+      resolve(); // never block the UI
     };
 
-    // Cancel any existing speech, then wait before speaking to avoid Chrome race
+    // Cancel any existing speech, then wait before speaking to avoid a Chrome race
     window.speechSynthesis.cancel();
     setTimeout(() => {
       window.speechSynthesis.speak(utterance);
@@ -144,32 +104,36 @@ function speakWithBrowser(text: string): Promise<void> {
   });
 }
 
-// Main TTS function with Google Cloud primary + browser fallback
-export async function speakJapanese(
-  ssmlKey: keyof typeof SSML_TEMPLATES,
-  apiKey: string,
-  voice: string
+// Speak arbitrary text. In live mode try Cloud TTS (Chirp3-HD) first, then browser.
+export async function speakText(
+  text: string,
+  voice: string,
+  useCloud: boolean
 ): Promise<TtsResult> {
-  const ssml = SSML_TEMPLATES[ssmlKey];
-  const plainText = PLAIN_TEXTS[ssmlKey];
-
-  // Try Google Cloud TTS if API key is available
-  if (apiKey && apiKey !== 'your_google_tts_api_key_here') {
+  if (useCloud) {
     try {
-      const base64Audio = await callGoogleCloudTts(ssml, apiKey, voice);
+      const base64Audio = await callServerTts(text, voice);
       await playBase64Audio(base64Audio);
       return { source: 'google-cloud', played: true };
     } catch (err) {
-      console.warn('[TTS] Google Cloud failed, falling back to browser:', err);
+      console.warn('[TTS] Cloud TTS failed, falling back to browser:', err);
     }
   }
 
-  // Browser fallback
   try {
-    await speakWithBrowser(plainText);
+    await speakWithBrowser(text);
     return { source: 'browser-fallback', played: true };
   } catch (err) {
     console.warn('[TTS] Browser speech also failed:', err);
     return { source: 'error', played: false };
   }
+}
+
+// Speak a predefined warm line by key.
+export async function speakJapanese(
+  key: keyof typeof TTS_TEXTS,
+  voice: string,
+  useCloud: boolean
+): Promise<TtsResult> {
+  return speakText(TTS_TEXTS[key], voice, useCloud);
 }

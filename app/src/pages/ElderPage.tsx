@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useSettings } from '../store/settings';
 import { useFamilyStore, createFamilyMemo } from '../store/family';
-import { GEMINI_MODEL, analyzeSampleDocument, analyzeMedicineImage } from '../api/gemini';
-import { speakJapanese } from '../api/tts';
+import { GEMINI_MODEL, FALLBACK_MEDICINE_CARD, analyzeSampleDocument, analyzeMedicineImage } from '../api/gemini';
+import { speakJapanese, speakText } from '../api/tts';
+import { useMicLevel } from '../hooks/useMicLevel';
 import type { CloudProof, MedicineCard, DemoState, TtsSource } from '../types';
 
 const formatProofTime = () =>
@@ -29,27 +30,115 @@ const getTtsProofLabel = (source: TtsSource) => {
 };
 
 export function ElderPage() {
-  const { mode, geminiApiKey, ttsApiKey, ttsVoice } = useSettings();
-  const { setMemo } = useFamilyStore();
+  const { mode, ttsVoice } = useSettings();
+  const { setMemo, addToken } = useFamilyStore();
+  const mic = useMicLevel();
 
   const [state, setState] = useState<DemoState>('idle');
   const [card, setCard] = useState<MedicineCard | null>(null);
   const [cloudProof, setCloudProof] = useState<CloudProof | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [careMessage, setCareMessage] = useState<string | null>(null);
+
+  const lastSpokeRef = useRef(0);
+  const speakingRef = useRef(false);
+
+  // Analyze one short clip: ask Gemini for a wellbeing reading, respond with care,
+  // and log a semantic signal to the family view. Raw audio is never stored or kept.
+  const analyzeClip = async (clip: { data: string; mimeType: string }, manual: boolean) => {
+    try {
+      const res = await fetch('/api/wellbeing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: clip.data, mimeType: clip.mimeType }),
+      });
+      if (!res.ok) return;
+      const { reading } = await res.json();
+      if (!reading) return;
+
+      const cues: string[] = reading.detectedCues || [];
+      const valence = typeof reading.valence === 'number' ? reading.valence : 0;
+      const negative = reading.concern !== 'low' || valence <= -0.3;
+
+      if ((manual || negative) && reading.moodLabel && reading.moodLabel !== 'unknown') {
+        addToken({
+          type: 'wellbeing_signal',
+          label: `気分: ${reading.moodLabel}`,
+          description: `検出: ${cues.join('、') || '—'}｜関心度: ${reading.concern}${reading.escalate ? '（ご家族に確認をおすすめ）' : ''}`,
+          timestamp: new Date().toLocaleTimeString('ja-JP', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+          }),
+        });
+      }
+
+      const now = Date.now();
+      if ((manual || negative) && reading.careMessageJa && now - lastSpokeRef.current > 18000) {
+        lastSpokeRef.current = now;
+        setCareMessage(reading.careMessageJa);
+        speakingRef.current = true;
+        try {
+          await speakText(reading.careMessageJa, ttsVoice, true);
+        } finally {
+          speakingRef.current = false;
+        }
+      }
+    } catch (err) {
+      console.warn('[wellbeing] analyze failed:', err);
+    }
+  };
+
+  const analyzeRef = useRef(analyzeClip);
+  useEffect(() => {
+    analyzeRef.current = analyzeClip;
+  });
+
+  // Manual "listen to me now": capture a clip and analyze it immediately.
+  const runWellbeingCheck = async (manual: boolean) => {
+    if (!mic.listening) return;
+    const clip = await mic.captureWav(5000);
+    if (clip) await analyzeRef.current(clip, manual);
+  };
+
+  // Continuous gentle monitoring while the mic is on: back-to-back short windows,
+  // analyzed only when there is actual sound (silence skipped) and not while speaking.
+  useEffect(() => {
+    if (!mic.listening) return;
+    let active = true;
+    let inflight = 0;
+    const loop = async () => {
+      while (active) {
+        const clip = await mic.captureWav(5000);
+        if (!active) break;
+        if (!clip || speakingRef.current) continue;
+        if (clip.peak < 0.01) continue; // skip near-silent windows
+        if (inflight >= 2) continue;
+        inflight++;
+        void analyzeRef.current(clip, false).finally(() => {
+          inflight--;
+        });
+      }
+    };
+    void loop();
+    return () => {
+      active = false;
+    };
+  }, [mic.listening]);
 
   const handleAction = async () => {
     try {
       setError(null);
       setState('processing');
 
-      // Step 1: Gemini analysis (Use sample text if no physical file to make flow seamless)
+      // Step 1: Gemini analysis (sample document path for a seamless one-tap flow)
       let result: MedicineCard;
-      if (mode === 'live' && geminiApiKey) {
-        result = await analyzeSampleDocument(geminiApiKey);
+      if (mode === 'live') {
+        result = await analyzeSampleDocument();
       } else {
         // Rehearsal fallback
-        await new Promise((resolve) => setTimeout(resolve, 1500)); // simulation pause
-        result = await analyzeSampleDocument(''); // returns fallback card
+        await new Promise((resolve) => setTimeout(resolve, 1200)); // simulation pause
+        result = FALLBACK_MEDICINE_CARD;
       }
 
       setCard(result);
@@ -57,7 +146,7 @@ export function ElderPage() {
 
       // Step 2: Play Reassuring Voice
       setState('speaking');
-      const ttsResult = await speakJapanese('medicineConfirmation', ttsApiKey, ttsVoice);
+      const ttsResult = await speakJapanese('medicineConfirmation', ttsVoice, mode === 'live');
       setCloudProof({
         geminiSource: result.source,
         ttsSource: ttsResult.source,
@@ -77,7 +166,7 @@ export function ElderPage() {
     try {
       setState('speaking');
       // Play reassuring handoff voice
-      const ttsResult = await speakJapanese('reassuringHandoff', ttsApiKey, ttsVoice);
+      const ttsResult = await speakJapanese('reassuringHandoff', ttsVoice, mode === 'live');
       setCloudProof({
         geminiSource: card.source,
         ttsSource: ttsResult.source,
@@ -100,6 +189,7 @@ export function ElderPage() {
     setCard(null);
     setCloudProof(null);
     setError(null);
+    setCareMessage(null);
     setState('idle');
   };
 
@@ -115,16 +205,15 @@ export function ElderPage() {
       reader.onload = async () => {
         const base64 = (reader.result as string).split(',')[1];
         try {
-          const result = await analyzeMedicineImage(
-            base64,
-            file.type,
-            mode === 'live' ? geminiApiKey : ''
-          );
+          const result =
+            mode === 'live'
+              ? await analyzeMedicineImage(base64, file.type)
+              : FALLBACK_MEDICINE_CARD;
           setCard(result);
           setState('card-ready');
 
           setState('speaking');
-          const ttsResult = await speakJapanese('medicineConfirmation', ttsApiKey, ttsVoice);
+          const ttsResult = await speakJapanese('medicineConfirmation', ttsVoice, mode === 'live');
           setCloudProof({
             geminiSource: result.source,
             ttsSource: ttsResult.source,
@@ -150,13 +239,22 @@ export function ElderPage() {
     <div className="page">
       {state === 'idle' && (
         <div className="orb-container">
-          <div className="orb-wrapper">
+          <div
+            className={`orb-wrapper${mic.listening ? ' listening' : ''}`}
+            style={{ ['--audio-level']: String(mic.level) } as React.CSSProperties}
+          >
             <div className="orb" />
           </div>
           <div className="elder-greeting">
             <h1>こんにちは</h1>
             <p>いつものお薬を確認しましょうか。</p>
           </div>
+          {careMessage && (
+            <div className="care-block">
+              <p className="care-caption">{careMessage}</p>
+              <span className="tts-credit">🔊 Google Cloud Text-to-Speech・Chirp3-HD</span>
+            </div>
+          )}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%', alignItems: 'center' }}>
             <button className="btn-primary" onClick={handleAction} id="action-btn">
               見る
@@ -170,6 +268,28 @@ export function ElderPage() {
                 style={{ display: 'none' }}
               />
             </label>
+            <button
+              type="button"
+              className={`mic-toggle${mic.enabled ? ' active' : ''}`}
+              onClick={mic.toggle}
+              aria-pressed={mic.enabled}
+            >
+              {mic.listening ? '🎙 音に反応しています' : '🎙 マイクに反応'}
+            </button>
+            {mic.error && (
+              <span style={{ fontSize: '0.8rem', color: 'var(--color-on-surface-variant)' }}>
+                マイクを使用できません（許可が必要です）
+              </span>
+            )}
+            {mic.listening && (
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => void runWellbeingCheck(true)}
+              >
+                気持ちを聞いてもらう
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -297,6 +417,10 @@ export function ElderPage() {
       <div className="safety-banner">
         SilverLink supports understanding and human handoff. It does not diagnose or change medication dosage.
       </div>
+
+      <p className="powered-credit">
+        🔊 音声: Google Cloud Text-to-Speech (Chirp3-HD)　/　🧠 理解: Gemini 3.5 (Vertex AI)
+      </p>
     </div>
   );
 }

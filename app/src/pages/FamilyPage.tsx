@@ -1,8 +1,24 @@
+import { useState } from 'react';
 import { useFamilyStore, SEMANTIC_TOKENS } from '../store/family';
+import { useSettings } from '../store/settings';
+import { buildLogText, fetchReport, type CareReport } from '../report';
+import { ReportCard } from '../components/ReportCard';
 import type { SemanticToken } from '../types';
 
 export function FamilyPage() {
   const { memo, tokens, addToken, clearTokens } = useFamilyStore();
+  const { doctorType } = useSettings();
+  const [report, setReport] = useState<CareReport | null>(null);
+  const [loadingReport, setLoadingReport] = useState(false);
+
+  const doctorLabel = doctorType === 'private' ? '私人医師' : '地域のかかりつけ医';
+  const hasData = Boolean(memo) || tokens.length > 0;
+
+  const makeReport = async () => {
+    setLoadingReport(true);
+    setReport(await fetchReport(buildLogText(memo, tokens), 'family'));
+    setLoadingReport(false);
+  };
 
   const injectToken = (tokenKey: keyof typeof SEMANTIC_TOKENS) => {
     const template = SEMANTIC_TOKENS[tokenKey];
@@ -18,6 +34,10 @@ export function FamilyPage() {
       <div className="family-page-header">
         <h1>ご家族・専門家向けビュー</h1>
         <p>シニアの様子と、手動確認メモを確認できます。</p>
+      </div>
+
+      <div className="recipients-banner">
+        この情報は <strong>ご家族</strong> と <strong>{doctorLabel}</strong> に共有されます。
       </div>
 
       <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -81,6 +101,19 @@ export function FamilyPage() {
           ) : (
             <div className="empty-state">
               <p>受信ログはありません。デモ操作盤からシグナルを注入してください。</p>
+            </div>
+          )}
+        </div>
+
+        {/* Family summary report (Gemini) */}
+        <div>
+          <h2 className="semantic-section-title">ご家族向けサマリー</h2>
+          <button className="btn-primary" onClick={makeReport} disabled={loadingReport || !hasData}>
+            {loadingReport ? '作成中...' : 'サマリーを作成（Gemini）'}
+          </button>
+          {report && (
+            <div style={{ marginTop: '1.5rem' }}>
+              <ReportCard report={report} audienceLabel="宛先: ご家族" />
             </div>
           )}
         </div>

@@ -250,6 +250,134 @@ button {
   to { transform: scale(1.06); filter: brightness(1.2); }
 }
 
+/* ===== Audio-reactive orb (homepage) ===== */
+.orb-wrapper {
+  transform: scale(calc(1 + var(--audio-level, 0) * 0.4));
+  transition: transform 80ms ease-out;
+}
+
+.orb-wrapper.listening .orb {
+  box-shadow:
+    0 0 calc(60px + var(--audio-level, 0) * 140px) var(--orb-glow-1),
+    0 0 calc(120px + var(--audio-level, 0) * 220px) var(--orb-glow-2);
+  filter: brightness(calc(1 + var(--audio-level, 0) * 0.45));
+}
+
+.mic-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: var(--font-size-sm);
+  color: var(--color-on-surface-variant);
+  background: transparent;
+  border: 1px solid var(--color-surface-container);
+  padding: 0.5rem 1.1rem;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.mic-toggle.active {
+  color: var(--color-primary);
+  border-color: var(--color-primary-dim);
+  background: var(--color-primary-container);
+}
+
+.care-caption {
+  max-width: 34ch;
+  text-align: center;
+  font-size: var(--font-size-lg);
+  line-height: 1.7;
+  color: var(--color-on-surface);
+  background: var(--color-primary-container);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md) var(--spacing-lg);
+  margin: 0 auto;
+}
+
+.care-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.tts-credit,
+.powered-credit {
+  font-size: var(--font-size-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.powered-credit {
+  text-align: center;
+  margin-top: var(--spacing-md);
+  opacity: 0.85;
+}
+
+/* ===== Recipients banner + summary report ===== */
+.recipients-banner {
+  width: 100%;
+  text-align: center;
+  font-size: var(--font-size-md);
+  color: var(--color-on-surface);
+  background: var(--color-primary-container);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+}
+
+.report-card {
+  background: var(--color-surface-variant);
+  border: 1px solid var(--color-surface-container);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-lg);
+  text-align: left;
+}
+
+.report-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  margin-bottom: var(--spacing-md);
+  flex-wrap: wrap;
+}
+
+.report-title {
+  font-size: var(--font-size-lg);
+  font-weight: 500;
+  color: var(--color-on-surface);
+}
+
+.report-audience {
+  font-size: var(--font-size-sm);
+  color: var(--color-primary);
+}
+
+.report-summary,
+.report-suggestion {
+  color: var(--color-on-surface);
+  line-height: 1.7;
+  margin-bottom: var(--spacing-md);
+}
+
+.report-bullets {
+  margin: 0 0 var(--spacing-md) 1.2rem;
+  color: var(--color-on-surface-variant);
+  line-height: 1.7;
+}
+
+.report-disclaimer {
+  font-size: var(--font-size-sm);
+  color: var(--color-on-surface-variant);
+}
+
+.report-credit {
+  font-size: var(--font-size-xs);
+  color: var(--color-on-surface-variant);
+  margin-top: var(--spacing-sm);
+}
+
 /* ===== Elder Greeting ===== */
 .elder-greeting {
   text-align: center;

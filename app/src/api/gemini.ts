@@ -1,4 +1,5 @@
-// Gemini API client for medicine/document understanding
+// Gemini medicine/document understanding — calls the server-side Vertex proxy.
+// No API key in the browser: the Cloud Run server uses a service account.
 
 import type { MedicineCard } from '../types';
 
@@ -14,130 +15,46 @@ export const FALLBACK_MEDICINE_CARD: MedicineCard = {
   source: 'fallback',
 };
 
-const MEDICINE_JSON_SCHEMA = {
-  type: 'object',
-  additionalProperties: false,
-  properties: {
-    medicineName: { type: 'string', description: 'Medicine name visible on label' },
-    timingLabel: { type: 'string', description: 'Dosage timing (e.g. 朝食後)' },
-    notes: { type: 'string', description: 'Visible information from the label or document' },
-    uncertainty: { type: 'string', description: 'What cannot be determined from this image alone' },
-    handoffAdvice: { type: 'string', description: 'Who should confirm this information' },
-  },
-  required: ['medicineName', 'timingLabel', 'notes', 'uncertainty', 'handoffAdvice'],
-};
-
-const MEDICINE_PROMPT = `
-You are a careful, calm assistant helping an elderly person understand medicine labels or health documents.
-
-Rules:
-- Do NOT diagnose any illness.
-- Do NOT recommend dosage changes.
-- Only describe what is visible in the image.
-- If uncertain, say so clearly and advise consulting a pharmacist or doctor.
-- Use simple, reassuring language suitable for older adults.
-- Always include a handoff recommendation.
-
-Respond in Japanese. Return structured JSON matching the schema.
-`.trim();
-
-let GoogleGenAIClass: typeof import('@google/genai').GoogleGenAI | null = null;
-
-async function createClient(apiKey: string) {
-  if (!GoogleGenAIClass) {
-    const { GoogleGenAI } = await import('@google/genai');
-    GoogleGenAIClass = GoogleGenAI;
+async function callAnalyze(body: Record<string, unknown>): Promise<MedicineCard> {
+  const res = await fetch('/api/analyze', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new Error(`analyze failed: ${res.status}`);
   }
-
-  return new GoogleGenAIClass({ apiKey });
-}
-
-function parseMedicineResponse(text?: string): MedicineCard {
-  if (!text) {
-    throw new Error('Gemini returned an empty response');
-  }
-
-  const parsed = JSON.parse(text);
-
+  const data = await res.json();
+  const c = data.card ?? {};
   return {
-    medicineName: parsed.medicineName,
-    timingLabel: parsed.timingLabel,
-    notes: parsed.notes,
-    uncertainty: parsed.uncertainty,
-    handoffAdvice: parsed.handoffAdvice,
+    medicineName: c.medicineName,
+    timingLabel: c.timingLabel,
+    notes: c.notes,
+    uncertainty: c.uncertainty,
+    handoffAdvice: c.handoffAdvice,
     source: 'gemini-live',
   };
 }
 
-export async function analyzeMedicineImage(
-  base64Image: string,
-  mimeType: string,
-  apiKey: string
-): Promise<MedicineCard> {
-  if (!apiKey || apiKey === 'your_gemini_api_key_here') {
-    console.warn('[Gemini] No API key — using fallback fixture');
-    return FALLBACK_MEDICINE_CARD;
-  }
-
+// One-tap demo flow: analyze a bundled sample document via Gemini.
+export async function analyzeSampleDocument(): Promise<MedicineCard> {
   try {
-    const ai = await createClient(apiKey);
-    const result = await ai.models.generateContent({
-      model: GEMINI_MODEL,
-      contents: [
-        { text: MEDICINE_PROMPT },
-        {
-          inlineData: {
-            data: base64Image,
-            mimeType,
-          },
-        },
-      ],
-      config: {
-        responseMimeType: 'application/json',
-        responseJsonSchema: MEDICINE_JSON_SCHEMA,
-        temperature: 0.2,
-      },
-    });
-
-    return parseMedicineResponse(result.text);
+    return await callAnalyze({ kind: 'sample' });
   } catch (err) {
-    console.error('[Gemini] API error, using fallback:', err);
+    console.error('[Gemini] proxy failed, using fallback:', err);
     return FALLBACK_MEDICINE_CARD;
   }
 }
 
-// For demo mode without image upload — analyze a sample prompt
-export async function analyzeSampleDocument(apiKey: string): Promise<MedicineCard> {
-  if (!apiKey || apiKey === 'your_gemini_api_key_here') {
-    return FALLBACK_MEDICINE_CARD;
-  }
-
+// Analyze an uploaded medicine/document image via Gemini.
+export async function analyzeMedicineImage(
+  base64Image: string,
+  mimeType: string
+): Promise<MedicineCard> {
   try {
-    const ai = await createClient(apiKey);
-    const result = await ai.models.generateContent({
-      model: GEMINI_MODEL,
-      contents: [
-        { text: MEDICINE_PROMPT },
-        {
-          text: `薬のラベル情報（テキスト形式）:
-薬品名: アムロジピン錠 5mg「サワイ」
-用法・用量: 1日1回 朝食後 1錠
-効能: 高血圧症、狭心症
-製造販売: 沢井製薬株式会社
-
-この情報から薬カードを作成してください。`,
-        },
-      ],
-      config: {
-        responseMimeType: 'application/json',
-        responseJsonSchema: MEDICINE_JSON_SCHEMA,
-        temperature: 0.2,
-      },
-    });
-
-    return parseMedicineResponse(result.text);
+    return await callAnalyze({ kind: 'image', mimeType, data: base64Image });
   } catch (err) {
-    console.error('[Gemini] Sample analysis error, using fallback:', err);
+    console.error('[Gemini] proxy failed, using fallback:', err);
     return FALLBACK_MEDICINE_CARD;
   }
 }

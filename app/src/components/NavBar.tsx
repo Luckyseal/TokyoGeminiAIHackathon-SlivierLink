@@ -22,6 +22,11 @@ export function NavBar({ onSettingsOpen }: NavBarProps) {
             家族へ
           </NavLink>
         </li>
+        <li>
+          <NavLink to="/doctor" className={({ isActive }) => isActive ? 'active' : ''}>
+            医師へ
+          </NavLink>
+        </li>
       </ul>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
         <span className={`nav-mode-badge ${mode === 'live' ? 'live' : ''}`}>
