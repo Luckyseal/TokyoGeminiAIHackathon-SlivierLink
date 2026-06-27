@@ -1,0 +1,29 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Runtime data
+pids
+*.pid
+
+# node_modules
+node_modules/
+
+# Build output
+dist/
+
+# Environment variables — NEVER commit real secrets
+.env
+.env.local
+.env.production
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Vite cache
+.vite/

@@ -1,0 +1,9 @@
+.DS_Store
+working/
+working.zip
+
+app/node_modules/
+app/dist/
+app/.env
+app/.env.*
+!app/.env.example
