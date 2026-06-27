@@ -10,7 +10,7 @@ export interface TtsResult {
 
 // SSML templates from cloud/02_senior_tts_ssml.md
 const SSML_MEDICINE_CONFIRMATION = `<speak>
-  <prosody rate="82%" pitch="-2st" volume="loud">
+  <prosody rate="92%">
     お薬が、まだ机の上にあるようです。<break time="700ms"/>
     急がなくても大丈夫です。<break time="600ms"/>
     一緒に、確認しましょうか。
@@ -18,7 +18,7 @@ const SSML_MEDICINE_CONFIRMATION = `<speak>
 </speak>`;
 
 const SSML_REASSURING_HANDOFF = `<speak>
-  <prosody rate="80%" pitch="-2st" volume="medium">
+  <prosody rate="92%">
     わかりました。<break time="600ms"/>
     ご家族に、短いメモを用意しますね。<break time="700ms"/>
     判断は、薬剤師さんにも確認できるようにしておきます。

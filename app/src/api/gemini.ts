@@ -1,6 +1,5 @@
 // Gemini API client for medicine/document understanding
 
-import { GoogleGenAI } from '@google/genai';
 import type { MedicineCard } from '../types';
 
 export const GEMINI_MODEL = 'gemini-3.5-flash';
@@ -42,8 +41,15 @@ Rules:
 Respond in Japanese. Return structured JSON matching the schema.
 `.trim();
 
-function createClient(apiKey: string) {
-  return new GoogleGenAI({ apiKey });
+let GoogleGenAIClass: typeof import('@google/genai').GoogleGenAI | null = null;
+
+async function createClient(apiKey: string) {
+  if (!GoogleGenAIClass) {
+    const { GoogleGenAI } = await import('@google/genai');
+    GoogleGenAIClass = GoogleGenAI;
+  }
+
+  return new GoogleGenAIClass({ apiKey });
 }
 
 function parseMedicineResponse(text?: string): MedicineCard {
@@ -74,7 +80,7 @@ export async function analyzeMedicineImage(
   }
 
   try {
-    const ai = createClient(apiKey);
+    const ai = await createClient(apiKey);
     const result = await ai.models.generateContent({
       model: GEMINI_MODEL,
       contents: [
@@ -107,7 +113,7 @@ export async function analyzeSampleDocument(apiKey: string): Promise<MedicineCar
   }
 
   try {
-    const ai = createClient(apiKey);
+    const ai = await createClient(apiKey);
     const result = await ai.models.generateContent({
       model: GEMINI_MODEL,
       contents: [
